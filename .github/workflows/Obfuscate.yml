@@ -1,55 +1,55 @@
-name: Build and Release
+name: Build and Obfuscate BPB Panel
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    # 每天凌晨1:00运行
+    - cron: "0 1 * * *"
 
 permissions:
   contents: write
-
-on:
-  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out the code
+      - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: Get release version
-        id: get_version
-        run: echo "RELEASE_VERSION=$(jq -r .version package.json)" >> $GITHUB_ENV
-
-      - name: Check release version
-        run: echo "Release version is $RELEASE_VERSION"
-
-      - name: Set up Node.js
+      - name: 设置 Node.js 环境
         uses: actions/setup-node@v4
         with:
           node-version: "latest"
 
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build project
-        run: npm run build
-
-      - name: Read release note
-        id: read_release
-        shell: bash
+      - name: 安装依赖项
         run: |
-          r=$(cat RELEASE.md)         
-          r="${r//'%'/'%25'}"                               
-          r="${r//$'\n'/'%0A'}"                             
-          r="${r//$'\r'/'%0D'}"                             
-          echo "RELEASE_BODY=$r" >> $GITHUB_OUTPUT          
+          npm install -g javascript-obfuscator
 
-      - name: Upload Release Assets
-        uses: svenstaro/upload-release-action@v2
+      - name: 下载 BPB worker.js
+        run: |
+          wget -O origin.js https://raw.githubusercontent.com/bia-pain-bache/BPB-Worker-Panel/main/build/unobfuscated-worker.js
+
+      - name: 混淆 BPB worker.js
+        run: |
+          javascript-obfuscator origin.js --output _worker.js \
+            --compact true \
+            --control-flow-flattening false \
+            --dead-code-injection false \
+            --identifier-names-generator mangled \
+            --rename-globals false \
+            --string-array true \
+            --string-array-encoding 'rc4' \
+            --string-array-threshold 0.75 \
+            --transform-object-keys true \
+            --unicode-escape-sequence true
+
+      - name: 提交更改
+        uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: dist/*
-          tag: v${{ env.RELEASE_VERSION }}
-          release_name: Release v${{ env.RELEASE_VERSION }}
-          overwrite: true
-          file_glob: true
-          prerelease: true
-          body: ${{ steps.read_release.outputs.RELEASE_BODY }}
+          branch: main
+          commit_message: ':arrow_up: 更新最新的 BPB 面板'
+          commit_author: 'github-actions[bot] <github-actions[bot]@users.noreply.github.com>'
+          push_options: '--set-upstream'
